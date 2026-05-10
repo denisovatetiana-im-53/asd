@@ -1,0 +1,199 @@
+
+<head>
+    <meta charset="UTF-8">
+    <title>ЛР5: Обхід графа (5310)</title>
+    <style>
+        body { font-family: sans-serif; display: flex; flex-direction: column; align-items: center; background: #f0f4f8; padding: 20px; }
+        .main-container { display: flex; gap: 20px; }
+        canvas { border: 2px solid #333; background: #fff; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+        .panel { width: 350px; background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+        .controls { display: flex; flex-direction: column; gap: 10px; }
+        button { padding: 10px; cursor: pointer; border: none; border-radius: 4px; font-weight: bold; transition: 0.3s; }
+        .btn-bfs { background: #28a745; color: white; }
+        .btn-dfs { background: #007bff; color: white; }
+        .btn-next { background: #ffc107; color: #212529; }
+        button:disabled { background: #ccc; cursor: not-allowed; }
+        .log { margin-top: 15px; font-size: 14px; border-top: 1px solid #eee; padding-top: 10px; }
+        .matrix-view { font-family: monospace; font-size: 10px; margin-top: 10px; white-space: pre; }
+    </style>
+</head>
+<body>
+    <h2>ЛР №5: Покроковий обхід графа (Варіант 5310)</h2>
+    
+    <div class="main-container">
+        <canvas id="graphCanvas" width="600" height="600"></canvas>
+        
+        <div class="panel">
+            <div class="controls">
+                <button class="btn-bfs" id="startBFS">Запустити BFS (В ширину)</button>
+                <button class="btn-dfs" id="startDFS">Запустити DFS (В глибину)</button>
+                <button class="btn-next" id="nextStep" disabled>Наступний крок</button>
+                <button onclick="location.reload()" style="background:#6c757d; color:white;">Скинути</button>
+            </div>
+            
+            <div class="log" id="status">Оберіть алгоритм обходу</div>
+            <div id="traversalOrder" style="font-weight: bold; color: #0056b3; margin-top: 5px;"></div>
+            
+            <div class="matrix-view" id="matrixContainer"></div>
+        </div>
+    </div>
+
+    <script>
+        const N = 11;
+        const canvas = document.getElementById('graphCanvas');
+        const ctx = canvas.getContext('2d');
+        const radius = 20;
+        
+        function generateMatrix() {
+            function mulberry32(a) {
+                return function() {
+                    let t = a += 0x6D2B79F5;
+                    t = Math.imul(t ^ t >>> 15, t | 1);
+                    t ^= t + Math.imul(t ^ t >>> 7, t | 61);
+                    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+                }
+            }
+            const rand = mulberry32(5310);
+            const k = 0.84; 
+            let matrix = [];
+            for(let i=0; i<N; i++) {
+                matrix[i] = [];
+                for(let j=0; j<N; j++) matrix[i][j] = (rand() * 2.0 * k >= 1.0) ? 1 : 0;
+            }
+            return matrix;
+        }
+
+        const adjMatrix = generateMatrix();
+        const vertices = [];
+        for (let i = 0; i < N; i++) {
+            const angle = (2 * Math.PI * i) / N;
+            vertices.push({ x: 300 + 250 * Math.cos(angle), y: 300 + 250 * Math.sin(angle), state: 'unvisited' });
+        }
+
+        let queue = [];
+        let stack = [];
+        let visitedOrder = [];
+        let treeEdges = [];
+        let currentAlgorithm = null;
+
+    
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            adjMatrix.forEach((row, i) => {
+                row.forEach((val, j) => {
+                    if (val) {
+                        const isTree = treeEdges.some(e => e.from === i && e.to === j);
+                        ctx.strokeStyle = isTree ? '#ff0000' : '#bdc3c7';
+                        ctx.lineWidth = isTree ? 3 : 1;
+                        
+                        ctx.beginPath();
+                        ctx.moveTo(vertices[i].x, vertices[i].y);
+                        ctx.lineTo(vertices[j].x, vertices[j].y);
+                        ctx.stroke();
+                    }
+                });
+            });
+
+            vertices.forEach((v, i) => {
+                ctx.beginPath();
+                ctx.arc(v.x, v.y, radius, 0, Math.PI * 2);
+                if (v.state === 'unvisited') ctx.fillStyle = '#fff';
+                else if (v.state === 'active') ctx.fillStyle = '#ffc107'; 
+                else if (v.state === 'visited') ctx.fillStyle = '#28a745'; 
+                
+                ctx.fill();
+                ctx.strokeStyle = '#333';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+                
+                ctx.fillStyle = '#000';
+                ctx.font = 'bold 14px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText(i + 1, v.x, v.y + 5);
+            });
+        }
+        function getStartVertex() {
+            for (let i = 0; i < N; i++) {
+                if (adjMatrix[i].some(v => v === 1)) return i;
+            }
+            return 0;
+        }
+
+        function initBFS() {
+            const start = getStartVertex();
+            queue = [start];
+            vertices[start].state = 'active';
+            currentAlgorithm = 'BFS';
+            prepareStep();
+        }
+
+        function initDFS() {
+            const start = getStartVertex();
+            stack = [start];
+            vertices[start].state = 'active';
+            currentAlgorithm = 'DFS';
+            prepareStep();
+        }
+
+        function prepareStep() {
+            document.getElementById('startBFS').disabled = true;
+            document.getElementById('startDFS').disabled = true;
+            document.getElementById('nextStep').disabled = false;
+            document.getElementById('status').innerText = `Алгоритм ${currentAlgorithm} запущено. Крокуйте!`;
+            draw();
+        }
+
+        function step() {
+            if (currentAlgorithm === 'BFS') {
+                if (queue.length === 0) return finish();
+                let u = queue.shift();
+                if (vertices[u].state !== 'visited') {
+                    vertices[u].state = 'visited';
+                    visitedOrder.push(u + 1);
+                    adjMatrix[u].forEach((val, v) => {
+                        if (val && vertices[v].state === 'unvisited') {
+                            vertices[v].state = 'active';
+                            queue.push(v);
+                            treeEdges.push({ from: u, to: v });
+                        }
+                    });
+                }
+            } else if (currentAlgorithm === 'DFS') {
+                if (stack.length === 0) return finish();
+                let u = stack.pop();
+                if (vertices[u].state !== 'visited') {
+                    vertices[u].state = 'visited';
+                    visitedOrder.push(u + 1);
+                    for (let v = N - 1; v >= 0; v--) {
+                        if (adjMatrix[u][v] && vertices[v].state === 'unvisited') {
+                            vertices[v].state = 'active';
+                            stack.push(v);
+                            treeEdges.push({ from: u, to: v });
+                        }
+                    }
+                }
+            }
+            
+            document.getElementById('traversalOrder').innerText = `Порядок: ${visitedOrder.join(' → ')}`;
+            draw();
+            if ((currentAlgorithm === 'BFS' && queue.length === 0) || (currentAlgorithm === 'DFS' && stack.length === 0)) {
+                finish();
+            }
+        }
+
+        function finish() {
+            document.getElementById('nextStep').disabled = true;
+            document.getElementById('status').innerText = "Обхід завершено! Дерево побудовано.";
+            console.log("Матриця дерева обходу:", treeEdges);
+        }
+
+        document.getElementById('startBFS').onclick = initBFS;
+        document.getElementById('startDFS').onclick = initDFS;
+        document.getElementById('nextStep').onclick = step;
+        
+        document.getElementById('matrixContainer').innerText = "Матриця суміжності:\n" + adjMatrix.map(r => r.join(' ')).join('\n');
+
+        draw();
+    </script>
+</body>
