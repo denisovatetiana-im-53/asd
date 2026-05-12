@@ -1,0 +1,164 @@
+<head>
+    <meta charset="UTF-8">
+    <title>ЛР6: Мінімальний кістяк (5310)</title>
+    <style>
+        body { font-family: sans-serif; display: flex; flex-direction: column; align-items: center; background: #f4f7f6; padding: 20px; }
+        .container { display: flex; gap: 20px; }
+        canvas { border: 2px solid #2c3e50; background: #fff; border-radius: 10px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
+        .info-panel { width: 350px; background: #fff; padding: 20px; border-radius: 10px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
+        .controls { display: flex; flex-direction: column; gap: 10px; margin-bottom: 20px; }
+        button { padding: 12px; cursor: pointer; border: none; border-radius: 5px; font-weight: bold; background: #3498db; color: white; transition: 0.3s; }
+        button:hover { background: #2980b9; }
+        button:disabled { background: #bdc3c7; cursor: not-allowed; }
+        .log { font-size: 14px; line-height: 1.5; color: #34495e; }
+        .weight-sum { font-size: 18px; color: #e74c3c; font-weight: bold; margin-top: 10px; }
+        pre { font-size: 10px; background: #eee; padding: 10px; overflow-x: auto; max-height: 200px; }
+    </style>
+</head>
+<body>
+    <h2>ЛР №6: Алгоритм Пріма (Варіант 5310)</h2>
+    <div class="container">
+        <canvas id="mstCanvas" width="650" height="650"></canvas>
+        <div class="info-panel">
+            <div class="controls">
+                <button id="nextStep">Наступний крок Пріма</button>
+                <button onclick="location.reload()" style="background:#95a5a6;">Скинути</button>
+            </div>
+            <div class="log" id="status">Натисніть кнопку, щоб почати з вершини 1.</div>
+            <div class="weight-sum" id="totalWeight">Сумарна вага: 0</div>
+            <h4>Матриця ваг (W):</h4>
+            <pre id="weightMatrixDisplay"></pre>
+        </div>
+    </div>
+
+    <script>
+        const N = 11;
+        const canvas = document.getElementById('mstCanvas');
+        const ctx = canvas.getContext('2d');
+        const radius = 22;
+
+        function mulberry32(a) {
+            return function() {
+                let t = a += 0x6D2B79F5;
+                t = Math.imul(t ^ t >>> 15, t | 1);
+                t ^= t + Math.imul(t ^ t >>> 7, t | 61);
+                return ((t ^ t >>> 14) >>> 0) / 4294967296;
+            }
+        }
+
+        const rand = mulberry32(5310);
+        const k = 0.94; 
+
+        let adj = Array.from({length: N}, () => new Array(N).fill(0));
+        let weightMatrix = Array.from({length: N}, () => new Array(N).fill(0));
+
+        for(let i=0; i<N; i++) {
+            for(let j=0; j<N; j++) {
+                let isEdge = (rand() * 2.0 * k >= 1.0) ? 1 : 0;
+                if (i === j) isEdge = 0;
+                adj[i][j] = isEdge;
+                
+                let weight = Math.ceil(rand() * 100);
+                weightMatrix[i][j] = isEdge * weight;
+            }
+        }
+        for(let i=0; i<N; i++) {
+            for(let j=0; j<N; j++) {
+                if (weightMatrix[i][j] !== weightMatrix[j][i]) {
+                    let maxW = Math.max(weightMatrix[i][j], weightMatrix[j][i]);
+                    weightMatrix[i][j] = weightMatrix[j][i] = maxW;
+                }
+            }
+        }
+
+        document.getElementById('weightMatrixDisplay').innerText = weightMatrix.map(row => row.join('\t')).join('\n');
+
+        const vertices = [];
+        for (let i = 0; i < N; i++) {
+            const angle = (2 * Math.PI * i) / N;
+            vertices.push({ x: 325 + 260 * Math.cos(angle), y: 325 + 260 * Math.sin(angle), inMST: false });
+        }
+
+        let mstEdges = [];
+        let totalWeight = 0;
+        vertices[0].inMST = true; 
+
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            ctx.setLineDash([5, 5]);
+            ctx.lineWidth = 1;
+            for(let i=0; i<N; i++) {
+                for(let j=i+1; j<N; j++) {
+                    if (weightMatrix[i][j] > 0) {
+                        ctx.strokeStyle = '#bdc3c7';
+                        ctx.beginPath();
+                        ctx.moveTo(vertices[i].x, vertices[i].y);
+                        ctx.lineTo(vertices[j].x, vertices[j].y);
+                        ctx.stroke();
+                        
+                        ctx.fillStyle = '#95a5a6';
+                        ctx.fillText(weightMatrix[i][j], (vertices[i].x + vertices[j].x)/2, (vertices[i].y + vertices[j].y)/2);
+                    }
+                }
+            }
+            ctx.setLineDash([]);
+
+            ctx.lineWidth = 4;
+            ctx.strokeStyle = '#e74c3c';
+            mstEdges.forEach(edge => {
+                ctx.beginPath();
+                ctx.moveTo(vertices[edge.u].x, vertices[edge.u].y);
+                ctx.lineTo(vertices[edge.v].x, vertices[edge.v].y);
+                ctx.stroke();
+            });
+
+            vertices.forEach((v, i) => {
+                ctx.beginPath();
+                ctx.arc(v.x, v.y, radius, 0, 7);
+                ctx.fillStyle = v.inMST ? '#e74c3c' : '#fff';
+                ctx.fill();
+                ctx.strokeStyle = '#2c3e50';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+                ctx.fillStyle = v.inMST ? '#fff' : '#000';
+                ctx.textAlign = 'center';
+                ctx.font = 'bold 14px Arial';
+                ctx.fillText(i + 1, v.x, v.y + 5);
+            });
+        }
+
+        function primaStep() {
+            let minW = Infinity;
+            let nextEdge = null;
+
+            for (let i = 0; i < N; i++) {
+                if (vertices[i].inMST) {
+                    for (let j = 0; j < N; j++) {
+                        if (!vertices[j].inMST && weightMatrix[i][j] > 0) {
+                            if (weightMatrix[i][j] < minW) {
+                                minW = weightMatrix[i][j];
+                                nextEdge = { u: i, v: j, w: minW };
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (nextEdge) {
+                mstEdges.push(nextEdge);
+                vertices[nextEdge.v].inMST = true;
+                totalWeight += nextEdge.w;
+                document.getElementById('status').innerText = `Додано ребро (${nextEdge.u+1}-${nextEdge.v+1}) з вагою ${nextEdge.w}`;
+                document.getElementById('totalWeight').innerText = `Сумарна вага: ${totalWeight}`;
+                draw();
+            } else {
+                document.getElementById('status').innerText = "Алгоритм завершено. Мінімальний кістяк побудовано!";
+                document.getElementById('nextStep').disabled = true;
+            }
+        }
+
+        document.getElementById('nextStep').onclick = primaStep;
+        draw();
+    </script>
+</body>
